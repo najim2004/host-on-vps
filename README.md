@@ -1,88 +1,101 @@
-# 🚀 Server Setup & Deployment Guide
+# 🚀 Production Server Setup & Deployment Guide
 
-(Backend + Frontend with Nginx, SSL, PM2, PostgreSQL, Redis)
+**(Backend + Frontend with Nginx, SSL, PM2, PostgreSQL, Redis)**
 
----
-
-## 🔐 Clone Private Repository
-
-```bash
-git clone https://token@github.com/username/repository.git .
-```
-
-**Example:**
-
-```bash
-git clone https://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@github.com/sojebsikder/jewellery-selling-ecommerce-web-app.git .
-```
+> ✅ Ubuntu 20.04 / 22.04
+> ✅ Node.js 20
+> ✅ Secure + Production Ready
 
 ---
 
-## 🔥 Setup User & Firewall
+## 🧱 1. Initial Server Preparation
 
-👉 Fresh server হলে এই ধাপগুলো চালাও
+### 🔹 Update System
 
 ```bash
-ufw allow OpenSSH
-ufw enable
+sudo apt update && sudo apt upgrade -y
+```
+
+### 🔹 Set Timezone (Optional but Recommended)
+
+```bash
+sudo timedatectl set-timezone Asia/Dhaka
 ```
 
 ---
 
-## 🌐 Setup Nginx
-
-### 🔹 Install Nginx
+## 👤 2. Create Non-Root User (Recommended)
 
 ```bash
-sudo apt update
-sudo apt install nginx
+adduser deploy
+usermod -aG sudo deploy
+su - deploy
 ```
 
-### 🔹 Adjust Firewall
+---
+
+## 🔐 3. Firewall (UFW)
 
 ```bash
-sudo ufw app list
-sudo ufw allow 'Nginx HTTP'
+sudo ufw allow OpenSSH
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw enable
 sudo ufw status
 ```
 
 ---
 
-## 📁 Setup Server Blocks
+## 🔑 4. Git & SSH Setup (Private Repo – Secure Way)
 
-### 🟦 Backend Directory
+### 🔹 Install Git
 
 ```bash
-sudo mkdir -p /var/www/backend
-sudo chown -R $USER:$USER /var/www/backend
-sudo chmod -R 755 /var/www/backend
-sudo nano /etc/nginx/sites-available/backend
-sudo ln -s /etc/nginx/sites-available/backend /etc/nginx/sites-enabled/
+sudo apt install git -y
+```
+
+### 🔹 Generate SSH Key
+
+```bash
+ssh-keygen -t ed25519 -C "server"
+cat ~/.ssh/id_ed25519.pub
+```
+
+👉 **GitHub → Settings → SSH Keys → Add**
+
+```bash
+ssh -T git@github.com
+```
+
+✅ **Avoid using GitHub tokens inside commands (security risk)**
+
+---
+
+## 🌐 5. Install & Setup Nginx
+
+```bash
+sudo apt install nginx -y
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+```bash
+sudo ufw allow 'Nginx Full'
 ```
 
 ---
 
-### 🟩 Frontend Directory
+## 📁 6. Project Directory Structure
 
 ```bash
-sudo mkdir -p /var/www/frontend
-sudo chown -R $USER:$USER /var/www/frontend
-sudo chmod -R 755 /var/www/frontend
-sudo nano /etc/nginx/sites-available/frontend
-sudo ln -s /etc/nginx/sites-available/frontend /etc/nginx/sites-enabled/
+sudo mkdir -p /var/www/backend /var/www/frontend
+sudo chown -R deploy:deploy /var/www
+sudo chmod -R 755 /var/www
 ```
 
 ---
 
-### 🔄 Restart Nginx
-
-```bash
-sudo systemctl restart nginx
-```
-
----
-
-## ⚙️ Nginx Configuration
+## ⚙️ 7. Nginx Server Blocks
 
 ### 🔹 Backend Config
 
@@ -93,17 +106,15 @@ sudo nano /etc/nginx/sites-available/backend
 ```nginx
 server {
     listen 80;
-    listen [::]:80;
-
     server_name backend.saythatsh.com;
 
     location / {
-        proxy_pass http://localhost:4000;
+        proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Forwarded-For $remote_addr;
     }
 }
 ```
@@ -119,134 +130,214 @@ sudo nano /etc/nginx/sites-available/frontend
 ```nginx
 server {
     listen 80;
-    listen [::]:80;
-
     server_name saythatsh.com www.saythatsh.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
     }
 }
 ```
 
 ```bash
-sudo systemctl restart nginx
+sudo ln -s /etc/nginx/sites-available/backend /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/frontend /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
 ---
 
-## 🔒 Setup SSL (Certbot)
+## 🔒 8. SSL Setup (Let’s Encrypt)
 
 ```bash
-sudo snap install core
-sudo snap refresh core
-sudo apt remove certbot
+sudo snap install core; sudo snap refresh core
 sudo snap install --classic certbot
 sudo ln -s /snap/bin/certbot /usr/bin/certbot
 ```
 
 ```bash
-sudo certbot --nginx -d saythatsh.com -d www.saythatsh.com -d backend.saythatsh.com
-sudo ufw allow 'Nginx HTTPS'
+sudo certbot --nginx \
+-d saythatsh.com \
+-d www.saythatsh.com \
+-d backend.saythatsh.com
+```
+
+🔁 Auto-renew test:
+
+```bash
+sudo certbot renew --dry-run
 ```
 
 ---
 
-## 🧩 Setup Application Environment
-
-### 🟢 Install Node.js (v20)
+## 🟢 9. Install Node.js (v20)
 
 ```bash
-curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install nodejs -y
+node -v
 ```
 
 ---
 
-### 🧶 Install Yarn
+## 🧶 10. Install Yarn & PM2
 
 ```bash
-sudo npm install -g yarn
+sudo npm install -g yarn pm2
+pm2 startup
 ```
+
+👉 copy & run generated command
 
 ---
 
-### 🚀 Install PM2
+## 🐘 11. PostgreSQL Setup (Secure)
 
 ```bash
-sudo npm install -g pm2
+sudo apt install postgresql postgresql-contrib -y
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
 ```
 
----
-
-## 🐘 Setup PostgreSQL
-
 ```bash
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql.service
 sudo -u postgres psql
 ```
 
 ```sql
-ALTER USER postgres PASSWORD 'root';
+CREATE DATABASE app_db;
+CREATE USER app_user WITH PASSWORD 'strong_password';
+ALTER ROLE app_user SET client_encoding TO 'utf8';
+ALTER ROLE app_user SET default_transaction_isolation TO 'read committed';
+ALTER ROLE app_user SET timezone TO 'UTC';
+GRANT ALL PRIVILEGES ON DATABASE app_db TO app_user;
+\q
 ```
+
+❌ **Never use postgres/root password in production**
 
 ---
 
-## 🔴 Setup Redis
+## 🔴 12. Redis Setup
 
 ```bash
-sudo apt update
-sudo apt install redis-server
+sudo apt install redis-server -y
 sudo systemctl enable redis-server
 sudo systemctl start redis-server
 redis-cli ping
 ```
 
+🔐 Optional:
+
+```bash
+sudo nano /etc/redis/redis.conf
+# set requirepass yourpassword
+```
+
 ---
 
-## 📦 Backend Setup
+## 📦 13. Backend Deployment
 
 ```bash
 cd /var/www/backend
-git clone https://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@github.com/backbencherstudio/web-messaging-backend.git .
+git clone git@github.com:backbencherstudio/web-messaging-backend.git .
 ```
+
+### 🔹 Environment Variables
+
+```bash
+nano .env
+```
+
+```env
+NODE_ENV=production
+PORT=4000
+DATABASE_URL=postgresql://app_user:password@localhost:5432/app_db
+REDIS_URL=redis://127.0.0.1:6379
+JWT_SECRET=supersecret
+```
+
+### 🔹 Build & Run
 
 ```bash
 yarn install
 npx prisma migrate deploy
 yarn build
-pm2 start dist/src/main.js --name "backend"
+pm2 start dist/src/main.js --name backend
 ```
 
 ---
 
-## 🎨 Frontend Setup
+## 🎨 14. Frontend Deployment
 
 ```bash
 cd /var/www/frontend
-git clone https://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@github.com/backbencherstudio/web-messaging-client-frontend.git .
+git clone git@github.com:backbencherstudio/web-messaging-client-frontend.git .
+```
+
+```bash
+nano .env
+```
+
+```env
+NEXT_PUBLIC_API_URL=https://backend.saythatsh.com
 ```
 
 ```bash
 npm install
-pm2 start npm --name "frontend" -- start
+npm run build
+pm2 start npm --name frontend -- start
 ```
 
 ---
 
-## ✅ Final Notes
+## ♻️ 15. PM2 Management
 
-* Backend → **Port 4000**
-* Frontend → **Port 3000**
-* Nginx → Reverse proxy
-* PM2 → App process manager
-* SSL → Auto-renew via Certbot
+```bash
+pm2 list
+pm2 logs
+pm2 restart backend
+pm2 save
+```
 
+---
 
+## 📊 16. Monitoring & Logs (Optional)
+
+```bash
+pm2 monit
+sudo tail -f /var/log/nginx/error.log
+```
+
+---
+
+## 🔐 17. Security Hardening (Recommended)
+
+* ❌ Disable root SSH login
+* 🔑 Use SSH key only
+* 🔄 Enable unattended upgrades
+
+```bash
+sudo apt install unattended-upgrades
+```
+
+---
+
+## ✅ Final Architecture
+
+| Service    | Port   |
+| ---------- | ------ |
+| Frontend   | 3000   |
+| Backend    | 4000   |
+| PostgreSQL | 5432   |
+| Redis      | 6379   |
+| Nginx      | 80/443 |
+
+---
+
+## 🏁 Done 🎉
+
+**Production-grade, secure, scalable setup ready 🚀**
